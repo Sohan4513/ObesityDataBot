@@ -1,4 +1,4 @@
-# WeightDistributionBot
+# WeightCorrelationAIBot
 
 ## **Overview**
 This project analyzes **obesity-related factors** using data from the **CDC Behavioral Risk Factor Surveillance System (BRFSS)**. It includes **data wrangling, cleaning, and machine learning models** to predict obesity (_RFBMIS variable) using **logistic regression with ridge regularization**.
