@@ -1,1 +1,1 @@
-# ObesityDataBot
+# WeightDistributionBot
