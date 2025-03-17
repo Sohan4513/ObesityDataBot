@@ -4,7 +4,7 @@
 This project analyzes **obesity-related factors** using data from the **CDC Behavioral Risk Factor Surveillance System (BRFSS)**. It includes **data wrangling, cleaning, and machine learning models** to predict obesity (_RFBMIS variable) using **logistic regression with ridge regularization**.
 
 ## **Dataset**
-- The dataset used is in **XPT format** (LLCP2022.XPT), which is read using the `haven` package.
+- The dataset used is in **XPT format** which is read using the `haven` package.
 - Data is preprocessed by **removing missing values, filtering specific features, and selecting relevant predictors**.
 
 ## **Requirements**
@@ -15,7 +15,7 @@ install.packages(c("haven", "tidyr", "tidymodels", "dplyr", "caret", "vip"))
 
 ## **Workflow**
 ### **1. Data Preprocessing**
-- Load the dataset using `haven::read_xpt("LLCP2022.XPT")`
+- Load the dataset using `haven::read_xpt("FILENAME")`
 - Remove variables that introduce multicollinearity.
 - Drop columns with **more than 40% missing values**.
 - Filter out invalid/missing responses (e.g., `c(7, 9, 99)` codes).
@@ -45,13 +45,8 @@ install.packages(c("haven", "tidyr", "tidymodels", "dplyr", "caret", "vip"))
   - **ROC curve analysis** for model performance.
 
 ## **How to Run**
-1. Ensure `LLCP2022.XPT` is in the working directory.
+1. Ensure the file you want to read is in the working directory.
 2. Run the R script in **RStudio** or an R environment.
 3. Check the model’s performance metrics.
-
-## **Future Improvements**
-- Incorporate additional predictors.
-- Compare different ML models (e.g., random forest, SVM).
-- Optimize hyperparameters for better performance.
 
 ---
