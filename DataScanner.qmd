@@ -1,0 +1,138 @@
+---
+title: "Obesity in CDC BRFSS Survey Data/Documentation"
+format: 
+  html: 
+    self-contained: trueeditor: 
+editor: visual
+---
+
+## Download
+
+Dowloading Data and Necessary Packages:
+
+```{r}
+library(haven)
+library(tidyr)
+library(tidymodels)
+library(dplyr)
+library(caret)
+library(vip)
+
+# Change to any CDC XPT file*
+data_CDC <- read_xpt("LLCP2022.XPT") 
+
+```
+
+## Filter
+
+Data Wrangling:
+
+```{r}
+# Filtering out all the computed variables to avoid colinearity
+data_CDC_clean <- data_CDC %>% select(-starts_with("_"), `_RACE1`, `_RFBMI5`) %>% 
+  # Selecting out columns that have greater than 40% of their values be NA
+  select(where(~ mean(is.na(.)) < 0.4))%>% 
+  drop_na() %>%
+filter(!(CELLSEX1 %in% c(3, 9))) %>% filter(!(LANDLINE %in% c(7, 9))) %>% filter(!(HHADULT %in% c(77, 99))) %>% filter(!(GENHLTH %in% c(7, 9))) %>% filter(!(PHYSHLTH %in% c(77, 99))) %>% filter(!(MENTHLTH %in% c(77, 99))) %>% filter(!(PRIMINSR %in% c(77, 99))) %>% filter(!(PERSDOC3 %in% c(7, 9))) %>% filter(!(MEDCOST1 %in% c(7, 9))) %>% filter(!(CHECKUP1 %in% c(7, 9))) %>% filter(!(EXERANY2 %in% c(7, 9))) %>% filter(!(SLEPTIM1 %in% c(77, 99))) %>% filter(!(LASTDEN4 %in% c(5, 7, 9))) %>% filter(!(RMVTETH4 %in% c(7, 9))) %>% filter(!(CVDINFR4 %in% c(7, 9))) %>% filter(!(CVDCRHD4 %in% c(7, 9))) %>% filter(!(CVDSTRK3 %in% c(7, 9))) %>% filter(!(ASTHMA3 %in% c(7, 9))) %>% filter(!(CHCSCNC1 %in% c(7, 9))) %>% filter(!(CHCOCNC1 %in% c(7, 9))) %>% filter(!(CHCCOPD3 %in% c(7, 9))) %>% filter(!(ADDEPEV3 %in% c(7, 9))) %>% filter(!(CHCKDNY2 %in% c(7, 9))) %>% filter(!(HAVARTH4 %in% c(7, 9))) %>% filter(!(DIABETE4 %in% c(7, 9))) %>% filter(MARITAL != 9) %>% filter(EDUCA != 9) %>% filter(!(RENTHOM1 %in% c(7, 9))) %>% filter(!(VETERAN3 %in% c(7, 9))) %>% filter(EMPLOY1 != 9) %>% filter(CHILDREN != 99) %>% filter(!(INCOME3 %in% c(77, 99))) %>% filter(HEIGHT3<711) %>% filter(!(DEAF %in% c(7, 9))) %>% filter(!(BLIND %in% c(7, 9))) %>% filter(!(DECIDE %in% c(7, 9))) %>% filter(!(DIFFWALK %in% c(7, 9))) %>% filter(!(DIFFDRES %in% c(7, 9))) %>% filter(!(DIFFALON %in% c(7, 9))) %>% filter(!(COLNCNCR %in% c(7, 9))) %>% filter(!(SMOKE100 %in% c(7, 9))) %>% filter(!(USENOW3 %in% c(7, 9))) %>% filter(!(LCSCTSC1 %in% c(7, 9))) %>% filter(201 < ALCDAY4 & ALCDAY4 < 299) %>% filter(!(FLUSHOT7 %in% c(7, 9))) %>% filter(!(PNEUVAC4 %in% c(7, 9))) %>% filter(!(TETANUS1 %in% c(7, 9))) %>% filter(!(HIVTST7 %in% c(7, 9))) %>% filter(!(HIVRISK5 %in% c(7, 9))) %>% filter(!(COVIDPOS %in% c(7, 9))) %>% filter(`_RFBMI5` != 9) %>% filter(`_RACE1` != 9) %>%
+  # Selecting out redundant variables
+  select(-(c(WEIGHT2, HTIN4, HEIGHT3, HTM4, WTKG3, SEXVAR))) 
+
+data_CDC_clean[data_CDC_clean == 88] <- 0 
+# Make sure all 88 inputs are coded as 0 as the documentation says
+
+```
+
+More Data Cleaning:
+
+```{r}
+# Removes ID factors, zero variance terms, and makes _RFBMI5 into outcome variable factor
+data_CDC_LCS_noID <- data_CDC_clean |> dplyr::select(-c(FMONTH, IDATE, IMONTH, IDAY, IYEAR, SEQNO)) %>% select_if(~var(.) != 0) %>% mutate(`_RFBMI5`= case_when(`_RFBMI5` == 1 ~ "no", `_RFBMI5` == 2 ~ "yes")) %>% mutate(`_RFBMI5`=factor(`_RFBMI5`)) 
+
+```
+
+Split Data with Smaller Training Set:
+
+```{r}
+CDC_split <- initial_split(data_CDC_LCS_noID, prop = 1/2)
+
+# Create data frames for the two sets:
+CDC_train <- training(CDC_split)
+CDC_test  <- testing(CDC_split)
+
+```
+
+## Train Models:
+
+Logistic/Ridge Regression: !!CHANGE LCSCTSC1 variable to `_RFBMI5`!!
+
+```{r}
+# Finding optimal penalty
+# Create multiple folds for cross-validation
+CDC_fold<- vfold_cv(CDC_train, v = 10)
+
+ridge_recipe <- 
+  recipe(`_RFBMI5` ~ ., data = CDC_train) |> 
+  # Accounts if new values in the test set
+  step_novel(all_nominal_predictors()) |>
+  # Removes predictors that are factors
+  step_dummy(all_nominal_predictors()) |>
+  # Removes predictors with zero variance
+  step_zv(all_predictors()) |>
+  # Scales the predictors
+  step_normalize(all_predictors())
+
+ridge_spec <- 
+  # The code will tune the penalty, mixture = 0 means pure ridge regression
+  logistic_reg(penalty = tune(), mixture = 0) |> 
+  set_mode("classification") |> 
+  set_engine("glmnet")
+
+ridge_workflow <- workflow() |> 
+  add_recipe(ridge_recipe) |> 
+  add_model(ridge_spec)
+
+penalty_grid <- grid_regular(penalty(range = c(-5, 5)), levels = 50)
+
+tune_res <- tune_grid(
+  ridge_workflow,
+  resamples = CDC_fold, 
+  grid = penalty_grid
+)
+
+autoplot(tune_res)
+
+# Use AUC of ROC as optimized metric
+best_penalty <- select_best(tune_res, metric = "roc_auc")
+
+ridge_spec_best <- logistic_reg(mixture = 0, penalty = best_penalty$penalty) |>
+  set_mode("classification") |> 
+  set_engine("glmnet")
+
+ridge_workflow_best <- workflow() |> 
+  add_recipe(ridge_recipe) |> 
+  add_model(ridge_spec_best)
+
+ridge_workflow_best <- workflow() |> 
+  add_model(ridge_spec_best) |> 
+  add_recipe(ridge_recipe)
+
+fit_ridge_best <- ridge_workflow_best |> 
+  fit(CDC_train)
+
+vip(fit_ridge_best)
+
+coef_df <- tidy(fit_ridge_best)
+ggplot(coef_df, aes(x = estimate, y = term)) + geom_point() + theme_minimal() + labs(title = "Logistic Regression Coefficients", x = "Coefficient Estimate", y = "Predictor") + theme(axis.text.y = element_text(size = 3, angle = 30, hjust = 1))
+
+tidy(fit_ridge_best, penalty = best_penalty$penalty) # Prints out fit
+
+compare_pred <- augment(fit_ridge_best, new_data = CDC_test) 
+table(compare_pred$`_RFBMI5`, compare_pred$.pred_class)
+compare_pred |> accuracy(truth = `_RFBMI5`, estimate = .pred_class)
+
+library(yardstick)
+# Calculating ROC (note puts no as positive value because no comes before yes alphabetically)
+roc_auc(compare_pred, truth = `_RFBMI5`, .pred_no)
+```
+
+## 
